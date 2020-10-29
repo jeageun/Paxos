@@ -23,6 +23,8 @@ public class Paxos implements PaxosRMI, Runnable{
 
     // Your data here
 
+    int seq;
+    Object value;
 
     /**
      * Call the constructor to create a Paxos peer.
@@ -107,11 +109,36 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public void Start(int seq, Object value){
         // Your code here
+        Paxos p1 = new Paxos(me, peers, ports);
+        p1.seq = seq;
+        p1.value = value;
+        Thread t1 = new Thread(p1);
+        t1.start();
+
     }
 
     @Override
     public void run(){
         //Your code here
+        if(this.seq < this.Min()){
+            return
+        }
+        for {
+            String time = System.currentTimeMillis();
+            Request packet;
+            packet.seq  = this.seq;
+            packet.value = this.value;
+            packet.time = time;
+            Response ack = Call("Prepare",packet,this.me);
+            if (ack.ok){
+                packet.value = ack.value;
+                Response ackback = Call("Accept",packet,this.me);
+                if(ackback.ok){
+                    if (Call("Decide",packet,this.me).ok)
+                        break;
+                }
+            }
+        }
     }
 
     // RMI handler

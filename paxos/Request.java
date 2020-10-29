@@ -9,6 +9,10 @@ import java.io.Serializable;
  */
 public class Request implements Serializable {
     static final long serialVersionUID=1L;
+    public int seq;
+    public Object value;
+    public String time;
+
     // Your data here
 
 
