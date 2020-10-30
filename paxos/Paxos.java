@@ -135,9 +135,11 @@ public class Paxos implements PaxosRMI, Runnable{
     @Override
     public void run(){
         //Your code here
+        /*
         if(this.seq < this.Min()){
             return;
         }
+        */
         while(true) {
             long time = choseN(this.seq);
             Request packet = new Request();
@@ -148,6 +150,7 @@ public class Paxos implements PaxosRMI, Runnable{
 
             if (ack.ok){
                 packet.time = ack.time;
+                packet.value = ack.value;
                 Response ackback = sendAccept(packet);
                 if(ackback.ok){
                     if (sendDecide(packet).ok){
@@ -166,6 +169,7 @@ public class Paxos implements PaxosRMI, Runnable{
         try{
             if(!this.map.containsKey(seq))
             {
+
                 return System.nanoTime();
             }
             Value val = this.map.get(seq);
@@ -179,7 +183,8 @@ public class Paxos implements PaxosRMI, Runnable{
 
     private Response sendPrepare(Request req){
         int count = 0;
-        long act_time =req.time;
+        long act_time =-1;
+        boolean flag = true;
         Object acp_val = req.value;
 
         for (int p=0;p<this.peers.length;p++){
@@ -194,15 +199,20 @@ public class Paxos implements PaxosRMI, Runnable{
                 if(ack.time > act_time){
                     act_time=ack.time;
                     acp_val =ack.value;
+                    flag = false;
                 }
             }
         }
 
         Response ack = new Response();
+        if(flag){
+            acp_val = req.value;
+            act_time = req.time;
+        }
         if(count>=this.threashold){
             ack.ok = true;
             ack.value=acp_val;
-            ack.time = act_time;
+            ack.time = req.time;
         }else{
             ack.ok = false;
         }
@@ -269,7 +279,7 @@ public class Paxos implements PaxosRMI, Runnable{
                 val.preptime = req.time;
                 val.value = req.value;
                 this.map.put(req.seq,val);
-                ack.time = req.time;
+                ack.time = val.accepttime;
                 ack.value = val.value;
                 ack.ok = true;
                 return ack;
@@ -304,16 +314,17 @@ public class Paxos implements PaxosRMI, Runnable{
                 val.accepttime = req.time;
                 val.value = req.value;
                 this.map.put(req.seq,val);
+                ack.value = val.value;
                 ack.ok = true;
                 return ack;
             }
             Value val = this.map.get(req.seq);
 
-
             if(req.time >= val.preptime){
                 val.preptime = req.time;
                 val.accepttime = req.time;
                 val.value = req.value;
+                ack.value = val.value;
                 ack.ok = true;
             }
             else
@@ -370,7 +381,6 @@ public class Paxos implements PaxosRMI, Runnable{
         }finally{
             this.mutex.unlock();
         }
-
     }
 
 
@@ -438,7 +448,6 @@ public class Paxos implements PaxosRMI, Runnable{
         }finally{
           this.mutex.unlock();
         }
-
     }
 
 
@@ -457,7 +466,12 @@ public class Paxos implements PaxosRMI, Runnable{
         try{
             retStatus ret;
             if(seq < this.Min()){
-                ret = new retStatus(State.Forgotten,null);
+                if(!this.map.containsKey(seq)){
+                    ret = new retStatus(State.Forgotten,null);
+                    return ret;
+                }
+                Value v = this.map.get(seq);
+                ret = new retStatus(v.status,v.value);
                 return ret;
             }
             if(this.map.containsKey(seq)){
