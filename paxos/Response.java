@@ -11,6 +11,7 @@ public class Response implements Serializable {
     // your data here
     boolean ok;
     Object value;
+    long time;
 
     // Your constructor and methods here
 }

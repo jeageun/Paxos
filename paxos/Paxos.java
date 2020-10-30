@@ -4,6 +4,9 @@ import java.rmi.server.UnicastRemoteObject;
 import java.rmi.registry.Registry;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.HashMap;
+import java.lang.Math;
+
 
 /**
  * This class is the main class you need to implement paxos instances.
@@ -24,9 +27,10 @@ public class Paxos implements PaxosRMI, Runnable{
     // Your data here
 
     int seq;
-    Object value;
-    int[] finish;
-    HashMap<Integer,String> kv;
+    Value value;
+    int[] done;
+    HashMap<Integer,Value> map;
+    int threashold;
 
 
 
@@ -45,12 +49,13 @@ public class Paxos implements PaxosRMI, Runnable{
         this.unreliable = new AtomicBoolean(false);
 
         // Your initialization code here
-        this.finish = new int[peers.length];
-        this.kv = new HashMap();
+        this.done = new int[peers.length];
+        this.map = new HashMap<Integer,Value>();
         // initialize array
-        for(int f : this.finish){
+        for(int f : this.done){
             f = -1;
         }
+        this.threashold = ((peers.length+1) /2);
         // register peers, do not modify this part
         try{
             System.setProperty("java.rmi.server.hostname", this.peers[this.me]);
@@ -119,7 +124,7 @@ public class Paxos implements PaxosRMI, Runnable{
         // Your code here
         this.mutex.lock();
         this.seq = seq;
-        this.value = value;
+        this.value.value = value;
         Thread t1 = new Thread(this);
         this.mutex.unlock();
         t1.start();
@@ -130,9 +135,9 @@ public class Paxos implements PaxosRMI, Runnable{
     public void run(){
         //Your code here
         if(this.seq < this.Min()){
-            return
+            return;
         }
-        for {
+        while(true) {
             long time = choseN(this.seq);
             Request packet = new Request();
             packet.seq  = this.seq;
@@ -141,15 +146,18 @@ public class Paxos implements PaxosRMI, Runnable{
             Response ack = sendPrepare(packet);
 
             if (ack.ok){
-                packet.value = ack.value;
-                Response ackback = Call("Accept",packet,this.me);
+                packet.time = ack.time;
+                Response ackback = sendAccept(packet);
                 if(ackback.ok){
-                    if (Call("Decide",packet,this.me).ok)
+                    if (sendDecide(packet).ok){
                         break;
+                    }
                 }
             }
+
         }
     }
+
 
     private long choseN(int seq){
     //choosen, unique and higher than anynseen so far
@@ -157,43 +165,190 @@ public class Paxos implements PaxosRMI, Runnable{
         try{
             if(!this.map.containsKey(seq))
             {
-                this.map.put(seq,val);
+                return System.nanoTime();
             }
             Value val = this.map.get(seq);
             long num = System.nanoTime();
-            return max(num,val.pretime) +1;
+            return Math.max(num,val.preptime) +1;
         }
         finally{
             this.mutex.unlock();
         }
     }
 
-    public Response sendPrepare(Request req){
+    private Response sendPrepare(Request req){
         int count = 0;
-        int proposl =req.time;
-        for (int p=0;p<this.peers.
+        long act_time =req.time;
+        Value acp_val = (Value)req.value;
 
+        for (int p=0;p<this.peers.length;p++){
+            Response ack;
+            if(p == this.me){
+                ack = Prepare(req);
+            }else{
+                ack = this.Call("Prepare",req,this.me);
+            }
+            if(ack != null && ack.ok){
+                count++;
+                if(ack.time > act_time){
+                    act_time=ack.time;
+                    acp_val =(Value)ack.value;
+                }
+            }
         }
+
+        Response ack = new Response();
+        if(count>this.threashold){
+            ack.ok = true;
+            ack.time = act_time;
+        }else{
+            ack.ok = false;
+        }
+        return ack;
     }
+
+    private Response sendAccept(Request req){
+        int count = 0;
+        long act_time =req.time;
+
+        for (int p=0;p<this.peers.length;p++){
+            Response ack;
+            if(p == this.me){
+                ack = Accept(req);
+            }else{
+                ack = this.Call("Accept",req,this.me);
+            }
+            if(ack != null && ack.ok){
+                count++;
+            }
+        }
+
+        Response ack = new Response();
+        if(count>this.threashold){
+            ack.ok = true;
+        }else{
+            ack.ok = false;
+        }
+        return ack;
+    }
+
+    private Response sendDecide(Request req){
+        int count = 0;
+        long act_time =req.time;
+
+        for (int p=0;p<this.peers.length;p++){
+            Response ack;
+            if(p == this.me){
+                ack = Decide(req);
+            }else{
+                ack = this.Call("Decide",req,this.me);
+            }
+            if(ack != null && ack.ok){
+                count++;
+            }
+        }
+
+        Response ack = new Response();
+        ack.ok = true;
+        return ack;
+    }
+
+
 
     // RMI handler
     public Response Prepare(Request req){
         // your code here
-        mutex.Lock();
+        this.mutex.lock();
+        try{
+            Response ack = new Response();
+            // If it's the first trial
+            if(!this.map.containsKey(req.seq)){
+                Value val = new Value();
+                val.preptime = req.time;
+                this.map.put(req.seq,val);
+                ack.time = req.time;
+                ack.value = val.value;
+                ack.ok = true;
+                return ack;
+            }
+            //else
+            Value val = this.map.get(req.seq);
 
-
-
-        mutex.Unlock();
+            if(req.time > val.preptime){
+                val.preptime = req.time;
+                ack.time = val.accepttime;
+                ack.value = val.value;
+                ack.ok = true;
+            }
+            else
+            {
+                ack.ok = false;
+            }
+            return ack;
+        }finally{
+            this.mutex.unlock();
+        }
     }
 
     public Response Accept(Request req){
         // your code here
+        this.mutex.lock();
+        try{
+            Response ack = new Response();
+            if(!this.map.containsKey(req.seq)){
+                Value val = new Value();
+                val.preptime = req.time;
+                val.accepttime = req.time;
+                val.value = req.value;
+                this.map.put(req.seq,val);
+                ack.ok = true;
+                return ack;
+            }
+            Value val = this.map.get(req.seq);
+
+
+            if(req.time >= val.preptime){
+                val.preptime = req.time;
+                val.accepttime = req.time;
+                val.value = req.value;
+                ack.ok = true;
+            }
+            else
+            {
+                ack.ok = false;
+            }
+            return ack;
+        }finally{
+            this.mutex.unlock();
+        }
 
     }
 
     public Response Decide(Request req){
         // your code here
-
+        this.mutex.lock();
+        try{
+            Response ack = new Response();
+            if(!this.map.containsKey(req.seq)){
+                Value val = new Value();
+                val.status = State.Decided;
+                val.preptime = req.time;
+                val.accepttime = req.time;
+                val.value = req.value;
+                this.map.put(req.seq,val);
+                ack.ok = true;
+                return ack;
+            }
+            Value val = this.map.get(req.seq);
+            val.status = State.Decided;
+            val.preptime = req.time;
+            val.accepttime = req.time;
+            val.value = req.value;
+            ack.ok = true;
+            return ack;
+        }finally{
+            this.mutex.unlock();
+        }
     }
 
     /**
@@ -204,6 +359,14 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public void Done(int seq) {
         // Your code here
+        this.mutex.lock();
+        try{
+            if(seq>this.done[this.me]){
+                this.done[this.me] = seq;
+            }
+        }finally{
+            this.mutex.unlock();
+        }
 
     }
 
@@ -215,6 +378,18 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public int Max(){
         // Your code here
+        this.mutex.lock();
+        try{
+            int max = -1;
+            for(Integer seq : this.map.keySet()){
+                if(seq>max){
+                    max = seq;
+                }
+            }
+            return max;
+        }finally{
+            this.mutex.unlock();
+        }
     }
 
     /**
@@ -247,6 +422,19 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public int Min(){
         // Your code here
+        this.mutex.lock();
+        int min = Integer.MAX_VALUE;
+        try{
+          for(int i=0;i<peers.length;i++){
+            if (this.done[i]<min)
+            {
+              min = this.done[i];
+            }
+          }
+          return min+1;
+        }finally{
+          this.mutex.unlock();
+        }
 
     }
 
@@ -261,7 +449,25 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public retStatus Status(int seq){
         // Your code here
+        this.mutex.lock();
 
+        try{
+            retStatus ret;
+            if(seq < this.Min()){
+                ret = new retStatus(State.Forgotten,null);
+                return ret;
+            }
+            if(this.map.containsKey(seq)){
+                Value v = this.map.get(seq);
+                ret = new retStatus(v.status,v.value);
+            }else{
+                ret = new retStatus(State.Pending,null);
+            }
+            return ret;
+        }finally
+        {
+            this.mutex.unlock();
+        }
     }
 
     /**
@@ -307,14 +513,16 @@ public class Paxos implements PaxosRMI, Runnable{
 
 
     private class Value {
-        Object data;
-        long pretime;
+        Object value;
+        long preptime;
         long accepttime;
+        State status;
 
         public Value(){
-            this.data=null;
-            this.pretime = -1;
+            this.value=null;
+            this.preptime = -1;
             this.accepttime = -1;
+            this.status = State.Pending;
         }
     }
 
