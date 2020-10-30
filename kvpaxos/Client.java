@@ -51,11 +51,15 @@ public class Client {
     // RMI handlers
     public Integer Get(String key){
         // Your code here
+        Response res = new Response();
+        return 1;
 
     }
 
     public boolean Put(String key, Integer value){
         // Your code here
+        Response res = new Response();
+        return true;
     }
 
 }

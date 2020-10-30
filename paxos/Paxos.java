@@ -52,8 +52,8 @@ public class Paxos implements PaxosRMI, Runnable{
         this.done = new int[peers.length];
         this.map = new HashMap<Integer,Value>();
         // initialize array
-        for(int f : this.done){
-            f = -1;
+        for(int i=0;i<this.done.length;i++){
+            this.done[i] = -1;
         }
         this.threashold = ((peers.length+1) /2);
         // register peers, do not modify this part
@@ -124,7 +124,8 @@ public class Paxos implements PaxosRMI, Runnable{
         // Your code here
         this.mutex.lock();
         this.seq = seq;
-        this.value.value = value;
+        this.value = new Value();
+        this.value.value= value;
         Thread t1 = new Thread(this);
         this.mutex.unlock();
         t1.start();
@@ -141,7 +142,7 @@ public class Paxos implements PaxosRMI, Runnable{
             long time = choseN(this.seq);
             Request packet = new Request();
             packet.seq  = this.seq;
-            packet.value = this.value;
+            packet.value = this.value.value;
             packet.time = time;
             Response ack = sendPrepare(packet);
 
@@ -179,27 +180,28 @@ public class Paxos implements PaxosRMI, Runnable{
     private Response sendPrepare(Request req){
         int count = 0;
         long act_time =req.time;
-        Value acp_val = (Value)req.value;
+        Object acp_val = req.value;
 
         for (int p=0;p<this.peers.length;p++){
             Response ack;
             if(p == this.me){
                 ack = Prepare(req);
             }else{
-                ack = this.Call("Prepare",req,this.me);
+                ack = this.Call("Prepare",req,p);
             }
             if(ack != null && ack.ok){
                 count++;
                 if(ack.time > act_time){
                     act_time=ack.time;
-                    acp_val =(Value)ack.value;
+                    acp_val =ack.value;
                 }
             }
         }
 
         Response ack = new Response();
-        if(count>this.threashold){
+        if(count>=this.threashold){
             ack.ok = true;
+            ack.value=acp_val;
             ack.time = act_time;
         }else{
             ack.ok = false;
@@ -216,7 +218,7 @@ public class Paxos implements PaxosRMI, Runnable{
             if(p == this.me){
                 ack = Accept(req);
             }else{
-                ack = this.Call("Accept",req,this.me);
+                ack = this.Call("Accept",req,p);
             }
             if(ack != null && ack.ok){
                 count++;
@@ -224,7 +226,7 @@ public class Paxos implements PaxosRMI, Runnable{
         }
 
         Response ack = new Response();
-        if(count>this.threashold){
+        if(count>=this.threashold){
             ack.ok = true;
         }else{
             ack.ok = false;
@@ -241,7 +243,7 @@ public class Paxos implements PaxosRMI, Runnable{
             if(p == this.me){
                 ack = Decide(req);
             }else{
-                ack = this.Call("Decide",req,this.me);
+                ack = this.Call("Decide",req,p);
             }
             if(ack != null && ack.ok){
                 count++;
@@ -265,6 +267,7 @@ public class Paxos implements PaxosRMI, Runnable{
             if(!this.map.containsKey(req.seq)){
                 Value val = new Value();
                 val.preptime = req.time;
+                val.value = req.value;
                 this.map.put(req.seq,val);
                 ack.time = req.time;
                 ack.value = val.value;
@@ -431,7 +434,7 @@ public class Paxos implements PaxosRMI, Runnable{
               min = this.done[i];
             }
           }
-          return min+1;
+          return (min+1);
         }finally{
           this.mutex.unlock();
         }
@@ -512,20 +515,6 @@ public class Paxos implements PaxosRMI, Runnable{
     }
 
 
-    private class Value {
-        Object value;
-        long preptime;
-        long accepttime;
-        State status;
-
-        public Value(){
-            this.value=null;
-            this.preptime = -1;
-            this.accepttime = -1;
-            this.status = State.Pending;
-        }
-    }
-
-
 
 }
+

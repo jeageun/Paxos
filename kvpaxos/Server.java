@@ -46,12 +46,14 @@ public class Server implements KVPaxosRMI {
     // RMI handlers
     public Response Get(Request req){
         // Your code here
-
+        Response res = new Response();
+        return res;
     }
 
     public Response Put(Request req){
         // Your code here
-
+        Response res = new Response();
+        return res;
     }
 
 
