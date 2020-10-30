@@ -25,6 +25,10 @@ public class Paxos implements PaxosRMI, Runnable{
 
     int seq;
     Object value;
+    int[] finish;
+    HashMap<Integer,String> kv;
+
+
 
     /**
      * Call the constructor to create a Paxos peer.
@@ -41,8 +45,12 @@ public class Paxos implements PaxosRMI, Runnable{
         this.unreliable = new AtomicBoolean(false);
 
         // Your initialization code here
-
-
+        this.finish = new int[peers.length];
+        this.kv = new HashMap();
+        // initialize array
+        for(int f : this.finish){
+            f = -1;
+        }
         // register peers, do not modify this part
         try{
             System.setProperty("java.rmi.server.hostname", this.peers[this.me]);
@@ -109,10 +117,11 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public void Start(int seq, Object value){
         // Your code here
-        Paxos p1 = new Paxos(me, peers, ports);
-        p1.seq = seq;
-        p1.value = value;
-        Thread t1 = new Thread(p1);
+        this.mutex.lock();
+        this.seq = seq;
+        this.value = value;
+        Thread t1 = new Thread(this);
+        this.mutex.unlock();
         t1.start();
 
     }
@@ -124,12 +133,13 @@ public class Paxos implements PaxosRMI, Runnable{
             return
         }
         for {
-            String time = System.currentTimeMillis();
-            Request packet;
+            long time = choseN(this.seq);
+            Request packet = new Request();
             packet.seq  = this.seq;
             packet.value = this.value;
             packet.time = time;
-            Response ack = Call("Prepare",packet,this.me);
+            Response ack = sendPrepare(packet);
+
             if (ack.ok){
                 packet.value = ack.value;
                 Response ackback = Call("Accept",packet,this.me);
@@ -141,10 +151,39 @@ public class Paxos implements PaxosRMI, Runnable{
         }
     }
 
+    private long choseN(int seq){
+    //choosen, unique and higher than anynseen so far
+        this.mutex.lock();
+        try{
+            if(!this.map.containsKey(seq))
+            {
+                this.map.put(seq,val);
+            }
+            Value val = this.map.get(seq);
+            long num = System.nanoTime();
+            return max(num,val.pretime) +1;
+        }
+        finally{
+            this.mutex.unlock();
+        }
+    }
+
+    public Response sendPrepare(Request req){
+        int count = 0;
+        int proposl =req.time;
+        for (int p=0;p<this.peers.
+
+        }
+    }
+
     // RMI handler
     public Response Prepare(Request req){
         // your code here
+        mutex.Lock();
 
+
+
+        mutex.Unlock();
     }
 
     public Response Accept(Request req){
@@ -165,6 +204,7 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public void Done(int seq) {
         // Your code here
+
     }
 
 
@@ -264,6 +304,20 @@ public class Paxos implements PaxosRMI, Runnable{
     public boolean isunreliable(){
         return this.unreliable.get();
     }
+
+
+    private class Value {
+        Object data;
+        long pretime;
+        long accepttime;
+
+        public Value(){
+            this.data=null;
+            this.pretime = -1;
+            this.accepttime = -1;
+        }
+    }
+
 
 
 }
