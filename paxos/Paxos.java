@@ -2,8 +2,10 @@ package paxos;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.rmi.registry.Registry;
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.Map;
 import java.util.HashMap;
 import java.lang.Math;
 
@@ -26,8 +28,9 @@ public class Paxos implements PaxosRMI, Runnable{
 
     // Your data here
 
-    int seq;
-    Value value;
+    ArrayList<Map.Entry<Integer,Value>> seqval;
+    //ArrayList<Integer> seq;
+    //ArrayList<Value> value;
     int[] done;
     HashMap<Integer,Value> map;
     int threashold;
@@ -55,6 +58,8 @@ public class Paxos implements PaxosRMI, Runnable{
         for(int i=0;i<this.done.length;i++){
             this.done[i] = -1;
         }
+
+        this.seqval = new ArrayList<Map.Entry<Integer,Value>>();
         this.threashold = ((peers.length+1) /2);
         // register peers, do not modify this part
         try{
@@ -123,13 +128,17 @@ public class Paxos implements PaxosRMI, Runnable{
     public void Start(int seq, Object value){
         // Your code here
         this.mutex.lock();
-        this.seq = seq;
-        this.value = new Value();
-        this.value.value= value;
-        Thread t1 = new Thread(this);
-        this.mutex.unlock();
-        t1.start();
+        try {
+            Value tmp = new Value();
+            tmp.value = value;
+            Map.Entry<Integer, Value> seqvaltmp = new HashMap.SimpleEntry<Integer, Value>(seq, tmp);
+            this.seqval.add(seqvaltmp);
 
+            Thread t1 = new Thread(this);
+            t1.start();
+        }finally {
+            this.mutex.unlock();
+        }
     }
 
     @Override
@@ -141,23 +150,42 @@ public class Paxos implements PaxosRMI, Runnable{
         }
         */
         while(true) {
-            long time = choseN(this.seq);
+            int seqtmp=0;
+            Value valtmp=null;
+            Map.Entry<Integer, Value> each;
+
+            this.mutex.lock();
+
+            each = this.seqval.get(0);
+            this.seqval.remove(0);
+
+            this.mutex.unlock();
+
+            seqtmp = each.getKey();
+            valtmp = each.getValue();
+
+            long time = choseN(seqtmp);
             Request packet = new Request();
-            packet.seq  = this.seq;
-            packet.value = this.value.value;
+            packet.seq = seqtmp;
+            packet.value = valtmp.value;
             packet.time = time;
             Response ack = sendPrepare(packet);
 
-            if (ack.ok){
+            if (ack.ok) {
                 packet.time = ack.time;
                 packet.value = ack.value;
                 Response ackback = sendAccept(packet);
-                if(ackback.ok){
-                    if (sendDecide(packet).ok){
+                if (ackback.ok) {
+                    if (sendDecide(packet).ok) {
+
                         break;
                     }
                 }
             }
+
+            this.mutex.lock();
+            this.seqval.add(each);
+            this.mutex.unlock();
 
         }
     }
@@ -169,7 +197,6 @@ public class Paxos implements PaxosRMI, Runnable{
         try{
             if(!this.map.containsKey(seq))
             {
-
                 return System.nanoTime();
             }
             Value val = this.map.get(seq);
