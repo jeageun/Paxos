@@ -100,7 +100,7 @@ public class KVPaxosTest {
         }
 
         Client[] ck = new Client[3];
-        for(int i = 0; i < npaxos; i++){
+        for(int i = 0; i < 3; i++){
             ck[i] = new Client(peers, ports);
         }
         System.out.println("Test: Basic put/get ...");

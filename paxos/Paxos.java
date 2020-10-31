@@ -227,9 +227,9 @@ public class Paxos implements PaxosRMI, Runnable{
                 ack = Prepare(req);
             }else{
                 ack = this.Call("Prepare",req,p);
-                this.done[p] = ack.maxDone;  // yue
             }
             if(ack != null && ack.ok){
+                this.done[p] = ack.maxDone;  // yue
                 count++;
                 if(ack.time > act_time){
                     act_time=ack.time;
@@ -264,10 +264,10 @@ public class Paxos implements PaxosRMI, Runnable{
                 ack = Accept(req);
             }else{
                 ack = this.Call("Accept",req,p);
-                this.done[p] = ack.maxDone;   //yue
             }
             if(ack != null && ack.ok){
                 count++;
+                this.done[p] = ack.maxDone;   //yue
             }
         }
 
@@ -290,9 +290,9 @@ public class Paxos implements PaxosRMI, Runnable{
                 ack = Decide(req);
             }else{
                 ack = this.Call("Decide",req,p);
-                this.done[p]= ack.maxDone;  // yue
             }
             if(ack != null && ack.ok){
+                this.done[p]= ack.maxDone;  // yue
                 count++;
             }
         }

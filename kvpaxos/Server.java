@@ -66,18 +66,23 @@ public class Server implements KVPaxosRMI {
         }
     }
 
-/*
+
     private void Proceed(Op operation){
         Op waiting;
         while(true){
             int serv = this.Serverseq;
             this.px.Start(serv,operation);
             waiting = this.wait(serv);
-            if ()
+            if(waiting.op == "Put"){
+                this.kvstore.put(waiting.key,waiting.value);
+            }
+            this.Serverseq++;
+            if (operation.ClientSeq == waiting.ClientSeq){
+                break;
+            }
         }
     }
 
- */
 
     // RMI handlers
     public Response Get(Request req) {
@@ -86,31 +91,11 @@ public class Server implements KVPaxosRMI {
         try{
             Response res = new Response();
             Op operation = new Op("Get", req.seq, req.key, req.value);
+            Proceed(operation);
 
-            if(kvstore.containsKey(req.key))
-            /*
-            Response res = new Response();
-            Op operation = new Op("Get", req.seq, req.key, req.value);
-            Op waiting;
-            this.px.Start(this.Serverseq, operation);
-            while (true) {
-                int serv = this.Serverseq;
-                waiting = this.wait(serv);
-                if (waiting.op == "Put") {
-                    this.kvstore.put(waiting.key, waiting.value);
-                }
-                if (operation.ClientSeq == waiting.ClientSeq) {
-                    if (waiting.op == "Get") {
-                        res.value = this.kvstore.get(waiting.key);
-                        res.ok = true;
-                        break;
-                    }
-                }
-                this.Serverseq++;
-            }
+            res.value = this.kvstore.get(operation.key);
+            res.ok = true;
             return res;
-
-             */
         }finally{
             this.mutex.unlock();
         }
@@ -122,25 +107,8 @@ public class Server implements KVPaxosRMI {
         try {
             Op operation = new Op("Put", req.seq, req.key, req.value);
             Response res = new Response();
-            Op waiting;
-
-            while (true) {
-                int serv = this.Serverseq;
-                this.px.Start(this.Serverseq, operation);
-                waiting = this.wait(serv);
-                if (waiting.op == "Put") {
-                    this.kvstore.put(waiting.key, waiting.value);
-                }
-                if (operation.ClientSeq == waiting.ClientSeq) {
-                    if (waiting.op == "Put") {
-                        res.ok = true;
-                    } else {
-                        res.ok = false;
-                    }
-                    break;
-                }
-                this.Serverseq++;
-            }
+            Proceed(operation);
+            res.ok = true;
 
             return res;
         }
