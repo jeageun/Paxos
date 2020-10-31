@@ -198,7 +198,7 @@ public class Paxos implements PaxosRMI, Runnable{
 
 
     private long choseN(int seq){
-    //choosen, unique and higher than anynseen so far
+        //choosen, unique and higher than anynseen so far
         this.mutex.lock();
         try{
             if(!this.map.containsKey(seq))
@@ -456,19 +456,16 @@ public class Paxos implements PaxosRMI, Runnable{
      * where z_i is the highest number ever passed
      * to Done() on peer i. A peers z_i is -1 if it has
      * never called Done().
-
      * Paxos is required to have forgotten all information
      * about any instances it knows that are < Min().
      * The point is to free up memory in long-running
      * Paxos-based servers.
-
      * Paxos peers need to exchange their highest Done()
      * arguments in order to implement Min(). These
      * exchanges can be piggybacked on ordinary Paxos
      * agreement protocol messages, so it is OK if one
      * peers Min does not reflect another Peers Done()
      * until after the next instance is agreed to.
-
      * The fact that Min() is defined as a minimum over
      * all Paxos peers means that Min() cannot increase until
      * all peers have been heard from. So if a peer is dead
@@ -484,15 +481,20 @@ public class Paxos implements PaxosRMI, Runnable{
         this.mutex.lock();
         int min = Integer.MAX_VALUE;
         try{
-          for(int i=0;i<peers.length;i++){
-            if (this.done[i] < min)
-            {
-              min = this.done[i];
+            for(int i=0;i<peers.length;i++){
+                if (this.done[i] < min)
+                {
+                    min = this.done[i];
+                }
             }
-          }
-          return (min+1);
+            for(int seq :map.keySet()){
+                if(seq<min){
+                    map.remove(seq);
+                }
+            }
+            return (min+1);
         }finally{
-          this.mutex.unlock();
+            this.mutex.unlock();
         }
     }
 
@@ -577,4 +579,3 @@ public class Paxos implements PaxosRMI, Runnable{
 
 
 }
-
