@@ -2,6 +2,8 @@ package kvpaxos;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
+import java.util.Random;
+import java.nio.charset.Charset;
 
 /**
  * This is a subset of entire test cases
@@ -123,6 +125,48 @@ public class KVPaxosTest {
         check(ck[0], "B", 15);
         ck[1].Put("B", 25);
         check(ck[1], "B", 25);
+        System.out.println("... Passed");
+    }
+
+    @Test
+    public void TestALOT(){
+        Random r = new Random();
+        String[] arr = new String[40];
+
+        for (int i =0;i<arr.length;i++) {
+            byte[] array = new byte[7]; // length is bounded by 7
+            new Random().nextBytes(array);
+            arr[i] =  new String(array, Charset.forName("UTF-8"));
+        }
+
+        final int npaxos = 10;
+        final int nclient = 30;
+        String host = "127.0.0.1";
+        String[] peers = new String[npaxos];
+        int[] ports = new int[npaxos];
+
+        Server[] kva = new Server[npaxos];
+        for(int i = 0 ; i < npaxos; i++){
+            ports[i] = 1100+i;
+            peers[i] = host;
+        }
+        for(int i = 0; i < npaxos; i++){
+            kva[i] = new Server(peers, ports, i);
+        }
+
+        Client[] ck = new Client[nclient];
+        for(int i = 0; i < nclient; i++){
+            ck[i] = new Client(peers, ports);
+        }
+        System.out.println("Test: Basic put/get ...");
+        for(int i =0;i<nclient*30;i++){
+            int input = r.nextInt(200);
+            int address = r.nextInt(200)%(arr.length);
+            ck[i%nclient].Put(arr[address],input);
+            check(ck[i%nclient], arr[address], input);
+            check(ck[(i+input)%nclient], arr[address], input);
+        }
+
         System.out.println("... Passed");
     }
 }

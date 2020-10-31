@@ -420,9 +420,9 @@ public class Paxos implements PaxosRMI, Runnable{
         this.mutex.lock();
         try{
             if(seq>this.done[this.me]){
-                System.out.println("Done called, this.done[me="+this.me +"] =" +this.done[this.me]);
+                //System.out.println("Done called, this.done[me="+this.me +"] =" +this.done[this.me]);
                 this.done[this.me] = seq;
-                System.out.println("made equal to seq =" +seq);
+                //System.out.println("made equal to seq =" +seq);
             }
         }finally{
             this.mutex.unlock();
