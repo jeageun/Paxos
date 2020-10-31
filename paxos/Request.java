@@ -12,6 +12,8 @@ public class Request implements Serializable {
     public int seq;
     public Object value;
     public long time;
+    public int maxDone ;
+    public int id; //yue
 
     // Your data here
 
