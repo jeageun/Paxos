@@ -60,7 +60,7 @@ public class Paxos implements PaxosRMI, Runnable{
         }
 
         this.seqval = new ArrayList<Map.Entry<Integer,Value>>();
-        this.threashold = ((peers.length+1) /2);
+        this.threashold = (int)((peers.length)/2) +1;
         // register peers, do not modify this part
         try{
             System.setProperty("java.rmi.server.hostname", this.peers[this.me]);
@@ -463,6 +463,8 @@ public class Paxos implements PaxosRMI, Runnable{
     public int Min(){
         // Your code here
         this.mutex.lock();
+
+
         int min = Integer.MAX_VALUE;
         try{
           for(int i=0;i<peers.length;i++){

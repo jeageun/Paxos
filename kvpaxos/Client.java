@@ -9,12 +9,17 @@ public class Client {
     int[] ports;
 
     // Your data here
+    int seq;
+    int threashlod;
 
 
     public Client(String[] servers, int[] ports){
         this.servers = servers;
         this.ports = ports;
         // Your initialization code here
+
+        this.seq = 0;
+        this.threashlod = (int)((servers.length)/2)+1;
     }
 
     /**
@@ -51,15 +56,41 @@ public class Client {
     // RMI handlers
     public Integer Get(String key){
         // Your code here
+        Request req = new Request();
+        req.key = key;
+        req.seq = this.seq;
+        this.seq ++;
         Response res = new Response();
-        return 1;
 
+        while(true) {
+            int count =0;
+            for (int i = 0; i < ports.length; i++) {
+                res = Call("Get", req, i);
+                if((res != null) && (res.ok)){
+                    break;
+                }
+            }
+            return res.value;
+        }
     }
 
     public boolean Put(String key, Integer value){
         // Your code here
-        Response res = new Response();
-        return true;
+        Request req = new Request();
+        req.key = key;
+        req.value = value;
+        req.seq = this.seq;
+        this.seq ++;
+        while(true) {
+            int count = 0;
+            for (int i = 0; i < ports.length; i++) {
+                Response res = Call("Put", req, i);
+                if ((res != null) && (res.ok)) {
+                    break;
+                }
+            }
+            return true;
+        }
     }
 
 }

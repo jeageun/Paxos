@@ -6,6 +6,7 @@ import paxos.State;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.HashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class Server implements KVPaxosRMI {
@@ -20,6 +21,8 @@ public class Server implements KVPaxosRMI {
     KVPaxosRMI stub;
 
     // Your definitions here
+    HashMap<String,Integer> kvstore;
+    int Serverseq;
 
 
     public Server(String[] servers, int[] ports, int me){
@@ -29,6 +32,9 @@ public class Server implements KVPaxosRMI {
         this.mutex = new ReentrantLock();
         this.px = new Paxos(me, servers, ports);
         // Your initialization code here
+        Serverseq = 0;
+        this.kvstore = new HashMap<String,Integer>();
+
 
 
 
@@ -42,18 +48,83 @@ public class Server implements KVPaxosRMI {
         }
     }
 
+    public Op wait(int seq){
+        int to = 10;
+        while(true){
+            Paxos.retStatus ret = this.px.Status(seq);
+            if(ret.state == State.Decided){
+                return Op.class.cast(ret.v);
+            }
+            try{
+                Thread.sleep(to);
+            } catch (Exception e){
+                e.printStackTrace();
+            }
+            if( to < 1000){
+                to = to * 2;
+            }
+        }
+    }
+
+
 
     // RMI handlers
-    public Response Get(Request req){
+    public Response Get(Request req) {
         // Your code here
+        this.mutex.lock();
+        try{
         Response res = new Response();
+        Op operation = new Op("Get", req.seq, req.key, req.value);
+        Op waiting;
+        int serv = this.Serverseq;
+        this.px.Start(serv, operation);
+        while (true) {
+            waiting = this.wait(serv);
+            if (req.seq == waiting.ClientSeq) {
+                if (waiting.op == "Get") {
+                    res.value = this.kvstore.get(waiting.key);
+                    res.ok = true;
+                    break;
+                }
+            }
+        }
+        this.Serverseq++;
         return res;
+        }finally{
+            this.mutex.unlock();
+        }
     }
 
     public Response Put(Request req){
         // Your code here
-        Response res = new Response();
-        return res;
+        this.mutex.lock();
+        try {
+            Op operation = new Op("Put", req.seq, req.key, req.value);
+            Response res = new Response();
+            Op waiting;
+            int serv = this.Serverseq;
+            this.px.Start(serv, operation);
+            while (true) {
+                waiting = this.wait(serv);
+                if (waiting.op == "Put") {
+                    this.kvstore.put(waiting.key, waiting.value);
+                }
+                if (req.seq == waiting.ClientSeq) {
+                    if (waiting.op == "Put") {
+                        res.ok = true;
+                    } else {
+                        res.ok = false;
+                    }
+                    break;
+                }
+                this.Serverseq++;
+            }
+
+            return res;
+        }
+        finally{
+            this.mutex.unlock();
+        }
     }
 
 
