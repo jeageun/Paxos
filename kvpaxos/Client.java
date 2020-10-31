@@ -19,7 +19,6 @@ public class Client {
         // Your initialization code here
 
         this.seq = 0;
-        this.threashlod = (int)((servers.length)/2)+1;
     }
 
     /**

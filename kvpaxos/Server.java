@@ -66,30 +66,51 @@ public class Server implements KVPaxosRMI {
         }
     }
 
+/*
+    private void Proceed(Op operation){
+        Op waiting;
+        while(true){
+            int serv = this.Serverseq;
+            this.px.Start(serv,operation);
+            waiting = this.wait(serv);
+            if ()
+        }
+    }
 
+ */
 
     // RMI handlers
     public Response Get(Request req) {
         // Your code here
         this.mutex.lock();
         try{
-        Response res = new Response();
-        Op operation = new Op("Get", req.seq, req.key, req.value);
-        Op waiting;
-        int serv = this.Serverseq;
-        this.px.Start(serv, operation);
-        while (true) {
-            waiting = this.wait(serv);
-            if (req.seq == waiting.ClientSeq) {
-                if (waiting.op == "Get") {
-                    res.value = this.kvstore.get(waiting.key);
-                    res.ok = true;
-                    break;
+            Response res = new Response();
+            Op operation = new Op("Get", req.seq, req.key, req.value);
+
+            if(kvstore.containsKey(req.key))
+            /*
+            Response res = new Response();
+            Op operation = new Op("Get", req.seq, req.key, req.value);
+            Op waiting;
+            this.px.Start(this.Serverseq, operation);
+            while (true) {
+                int serv = this.Serverseq;
+                waiting = this.wait(serv);
+                if (waiting.op == "Put") {
+                    this.kvstore.put(waiting.key, waiting.value);
                 }
+                if (operation.ClientSeq == waiting.ClientSeq) {
+                    if (waiting.op == "Get") {
+                        res.value = this.kvstore.get(waiting.key);
+                        res.ok = true;
+                        break;
+                    }
+                }
+                this.Serverseq++;
             }
-        }
-        this.Serverseq++;
-        return res;
+            return res;
+
+             */
         }finally{
             this.mutex.unlock();
         }
@@ -102,14 +123,15 @@ public class Server implements KVPaxosRMI {
             Op operation = new Op("Put", req.seq, req.key, req.value);
             Response res = new Response();
             Op waiting;
-            int serv = this.Serverseq;
-            this.px.Start(serv, operation);
+
             while (true) {
+                int serv = this.Serverseq;
+                this.px.Start(this.Serverseq, operation);
                 waiting = this.wait(serv);
                 if (waiting.op == "Put") {
                     this.kvstore.put(waiting.key, waiting.value);
                 }
-                if (req.seq == waiting.ClientSeq) {
+                if (operation.ClientSeq == waiting.ClientSeq) {
                     if (waiting.op == "Put") {
                         res.ok = true;
                     } else {
