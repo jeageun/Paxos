@@ -60,7 +60,7 @@ public class Paxos implements PaxosRMI, Runnable{
         }
 
         this.seqval = new ArrayList<Map.Entry<Integer,Value>>();
-        this.threashold = (int)((peers.length)/2) +1;
+        this.threashold = ((peers.length+1) /2);
         // register peers, do not modify this part
         try{
             System.setProperty("java.rmi.server.hostname", this.peers[this.me]);
@@ -129,13 +129,16 @@ public class Paxos implements PaxosRMI, Runnable{
         // Your code here
         this.mutex.lock();
         try {
-            Value tmp = new Value();
-            tmp.value = value;
-            Map.Entry<Integer, Value> seqvaltmp = new HashMap.SimpleEntry<Integer, Value>(seq, tmp);
-            this.seqval.add(seqvaltmp);
+            if(seq >= this.Min()){
+                Value tmp = new Value();
+                tmp.value = value;
+                Map.Entry<Integer, Value> seqvaltmp = new HashMap.SimpleEntry<Integer, Value>(seq, tmp);
+                this.seqval.add(seqvaltmp);
 
-            Thread t1 = new Thread(this);
-            t1.start();
+                Thread t1 = new Thread(this);
+                t1.start();
+            }
+
         }finally {
             this.mutex.unlock();
         }
@@ -169,6 +172,8 @@ public class Paxos implements PaxosRMI, Runnable{
             packet.seq = seqtmp;
             packet.value = valtmp.value;
             packet.time = time;
+            packet.maxDone = done[this.me];  // yue added
+            packet.id = this.me ;
             Response ack = sendPrepare(packet);
 
             if (ack.ok) {
@@ -181,6 +186,7 @@ public class Paxos implements PaxosRMI, Runnable{
                         break;
                     }
                 }
+
             }
 
             this.mutex.lock();
@@ -216,10 +222,12 @@ public class Paxos implements PaxosRMI, Runnable{
 
         for (int p=0;p<this.peers.length;p++){
             Response ack;
+
             if(p == this.me){
                 ack = Prepare(req);
             }else{
                 ack = this.Call("Prepare",req,p);
+                this.done[p] = ack.maxDone;  // yue
             }
             if(ack != null && ack.ok){
                 count++;
@@ -256,6 +264,7 @@ public class Paxos implements PaxosRMI, Runnable{
                 ack = Accept(req);
             }else{
                 ack = this.Call("Accept",req,p);
+                this.done[p] = ack.maxDone;   //yue
             }
             if(ack != null && ack.ok){
                 count++;
@@ -281,6 +290,7 @@ public class Paxos implements PaxosRMI, Runnable{
                 ack = Decide(req);
             }else{
                 ack = this.Call("Decide",req,p);
+                this.done[p]= ack.maxDone;  // yue
             }
             if(ack != null && ack.ok){
                 count++;
@@ -299,7 +309,9 @@ public class Paxos implements PaxosRMI, Runnable{
         // your code here
         this.mutex.lock();
         try{
+            this.done[req.id] = req.maxDone;  // yue
             Response ack = new Response();
+            ack.maxDone = this.done[this.me];  // yue
             // If it's the first trial
             if(!this.map.containsKey(req.seq)){
                 Value val = new Value();
@@ -309,6 +321,7 @@ public class Paxos implements PaxosRMI, Runnable{
                 ack.time = val.accepttime;
                 ack.value = val.value;
                 ack.ok = true;
+
                 return ack;
             }
             //else
@@ -334,7 +347,9 @@ public class Paxos implements PaxosRMI, Runnable{
         // your code here
         this.mutex.lock();
         try{
+            this.done[req.id] = req.maxDone;  // yue
             Response ack = new Response();
+            ack.maxDone = this.done[this.me];  // yue
             if(!this.map.containsKey(req.seq)){
                 Value val = new Value();
                 val.preptime = req.time;
@@ -369,7 +384,9 @@ public class Paxos implements PaxosRMI, Runnable{
         // your code here
         this.mutex.lock();
         try{
+            this.done[req.id] = req.maxDone;  // yue
             Response ack = new Response();
+            ack.maxDone = this.done[this.me];  // yue
             if(!this.map.containsKey(req.seq)){
                 Value val = new Value();
                 val.status = State.Decided;
@@ -398,12 +415,14 @@ public class Paxos implements PaxosRMI, Runnable{
      *
      * see the comments for Min() for more explanation.
      */
-    public void Done(int seq) {
+    public void Done(int seq) {   // ok to forget all instances <= seq
         // Your code here
         this.mutex.lock();
         try{
             if(seq>this.done[this.me]){
+                System.out.println("Done called, this.done[me="+this.me +"] =" +this.done[this.me]);
                 this.done[this.me] = seq;
+                System.out.println("made equal to seq =" +seq);
             }
         }finally{
             this.mutex.unlock();
@@ -463,12 +482,10 @@ public class Paxos implements PaxosRMI, Runnable{
     public int Min(){
         // Your code here
         this.mutex.lock();
-
-
         int min = Integer.MAX_VALUE;
         try{
           for(int i=0;i<peers.length;i++){
-            if (this.done[i]<min)
+            if (this.done[i] < min)
             {
               min = this.done[i];
             }
