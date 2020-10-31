@@ -12,6 +12,7 @@ public class Response implements Serializable {
     boolean ok;
     Object value;
     long time;
+    public int maxDone;
 
     // Your constructor and methods here
 }
