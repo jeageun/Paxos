@@ -80,6 +80,9 @@ public class KVPaxosTest {
         ck.ports[1] = 1101;
         ck.Put("B", 15);
         check(ck, "B", 15);
+        check(ck, "app", 16);
+        check(ck, "a", 15);
+
 
         System.out.println("... Passed");
 
@@ -139,7 +142,7 @@ public class KVPaxosTest {
             arr[i] =  new String(array, Charset.forName("UTF-8"));
         }
 
-        final int npaxos = 10;
+        final int npaxos = 5;
         final int nclient = 30;
         String host = "127.0.0.1";
         String[] peers = new String[npaxos];
@@ -159,12 +162,15 @@ public class KVPaxosTest {
             ck[i] = new Client(peers, ports);
         }
         System.out.println("Test: Basic put/get ...");
-        for(int i =0;i<nclient*30;i++){
+        for(int i =0;i<nclient;i++){
             int input = r.nextInt(200);
             int address = r.nextInt(200)%(arr.length);
+            int pt = r.nextInt(ports.length-1);
+            ck[i%nclient].ports[pt] = 0;
             ck[i%nclient].Put(arr[address],input);
             check(ck[i%nclient], arr[address], input);
             check(ck[(i+input)%nclient], arr[address], input);
+            ck[i%nclient].ports[pt] = 1100+pt;
         }
 
         System.out.println("... Passed");

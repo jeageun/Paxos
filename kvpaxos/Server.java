@@ -73,10 +73,12 @@ public class Server implements KVPaxosRMI {
             int serv = this.Serverseq;
             this.px.Start(serv,operation);
             waiting = this.wait(serv);
-            if(waiting.op == "Put"){
+            if(waiting.op.equals("Put")){
                 this.kvstore.put(waiting.key,waiting.value);
             }
+            this.px.Done(serv);
             this.Serverseq++;
+
             if (operation.ClientSeq == waiting.ClientSeq){
                 break;
             }

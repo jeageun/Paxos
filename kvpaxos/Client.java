@@ -69,6 +69,7 @@ public class Client {
                     break;
                 }
             }
+            if(res == null) continue;
             return res.value;
         }
     }
@@ -76,6 +77,7 @@ public class Client {
     public boolean Put(String key, Integer value){
         // Your code here
         Request req = new Request();
+        Response res=null;
         req.key = key;
         req.value = value;
         req.seq = this.seq;
@@ -83,11 +85,12 @@ public class Client {
         while(true) {
             int count = 0;
             for (int i = 0; i < ports.length; i++) {
-                Response res = Call("Put", req, i);
+                res = Call("Put", req, i);
                 if ((res != null) && (res.ok)) {
                     break;
                 }
             }
+            if(res == null) continue;
             return true;
         }
     }
