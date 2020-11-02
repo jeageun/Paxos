@@ -9,14 +9,20 @@ import java.io.Serializable;
  */
 public class Request implements Serializable {
     static final long serialVersionUID=1L;
-    public int seq;
-    public Object value;
-    public long time;
-    public int maxDone ;
-    public int id; //yue
-
     // Your data here
-
+    public int seq;
+    public long preptime; // proposed number
+    public Object value;
+    public int id ;
+    public int maxDone;
 
     // Your constructor and methods here
+
+    public Request(int seq, long preptime, Object value, int id, int maxDone) {
+        this.seq = seq;
+        this.preptime = preptime;
+        this.value = value;
+        this.id = id;
+        this.maxDone = maxDone;
+    }
 }

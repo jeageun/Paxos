@@ -1,4 +1,5 @@
 package paxos;
+
 import java.io.Serializable;
 
 /**
@@ -9,10 +10,25 @@ import java.io.Serializable;
 public class Response implements Serializable {
     static final long serialVersionUID=2L;
     // your data here
-    boolean ok;
-    Object value;
-    long time;
+    public boolean ok;
+    public Object value; // value which has received
+    public long accepttime; // last time the proposal was accepted, the accepttime
+    public long preptime;  // highest prepare seen
     public int maxDone;
+    public int id;
 
     // Your constructor and methods here
+
+    public Response() {
+
+    }
+
+    public Response(boolean ok, Object value,long preptime, long accepttime, int maxDone, int id) {
+        this.ok = ok;
+        this.value = value;
+        this.preptime = preptime;
+        this.accepttime = accepttime;
+        this.maxDone = maxDone;
+        this.id = id;
+    }
 }

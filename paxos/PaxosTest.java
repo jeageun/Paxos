@@ -2,7 +2,7 @@ package paxos;
 
 import org.junit.Test;
 
-import static org.junit.Assert.*;
+
 import static org.junit.Assert.assertFalse;
 
 /**
@@ -19,9 +19,11 @@ public class PaxosTest {
             if(pxa[i] != null){
                 ret = pxa[i].Status(seq);
                 if(ret.state == State.Decided) {
+                   // System.out.println("i="+i+", ret.v"+ret.v);
                     assertFalse("decided values do not match: seq=" + seq + " i=" + i + " v=" + v + " v1=" + ret.v, counter > 0 && !v.equals(ret.v));
                     counter++;
                     v = ret.v;
+
                 }
 
             }
@@ -127,7 +129,7 @@ public class PaxosTest {
     @Test
     public void TestDeaf(){
 
-        final int npaxos = 5;
+        final int npaxos = 5;  //原来是５
         Paxos[] pxa = initPaxos(npaxos);
 
         System.out.println("Test: Deaf proposer ...");
@@ -212,6 +214,7 @@ public class PaxosTest {
             for(int i = 0; i < npaxos; i++){
                 int s = pxa[i].Min();
                 if(s != 1){
+                    System.out.println("when i=" +i +", s = " +s +",return false");
                     ok = false;
                 }
             }
