@@ -6,7 +6,6 @@ import paxos.State;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.HashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class Server implements KVPaxosRMI {
@@ -21,8 +20,6 @@ public class Server implements KVPaxosRMI {
     KVPaxosRMI stub;
 
     // Your definitions here
-    HashMap<String,Integer> kvstore;
-    int Serverseq;
 
 
     public Server(String[] servers, int[] ports, int me){
@@ -32,9 +29,6 @@ public class Server implements KVPaxosRMI {
         this.mutex = new ReentrantLock();
         this.px = new Paxos(me, servers, ports);
         // Your initialization code here
-        Serverseq = 0;
-        this.kvstore = new HashMap<String,Integer>();
-
 
 
 
@@ -48,75 +42,16 @@ public class Server implements KVPaxosRMI {
         }
     }
 
-    public Op wait(int seq){
-        int to = 10;
-        while(true){
-            Paxos.retStatus ret = this.px.Status(seq);
-            if(ret.state == State.Decided){
-                return Op.class.cast(ret.v);
-            }
-            try{
-                Thread.sleep(to);
-            } catch (Exception e){
-                e.printStackTrace();
-            }
-            if( to < 1000){
-                to = to * 2;
-            }
-        }
-    }
-
-
-    private void Proceed(Op operation){
-        Op waiting;
-        while(true){
-            int serv = this.Serverseq;
-            this.px.Start(serv,operation);
-            waiting = this.wait(serv);
-            if(waiting.op.equals("Put")){
-                this.kvstore.put(waiting.key,waiting.value);
-            }
-            this.px.Done(serv);
-            this.Serverseq++;
-
-            if (operation.ClientSeq == waiting.ClientSeq){
-                break;
-            }
-        }
-    }
-
 
     // RMI handlers
-    public Response Get(Request req) {
+    public Response Get(Request req){
         // Your code here
-        this.mutex.lock();
-        try{
-            Response res = new Response();
-            Op operation = new Op("Get", req.seq, req.key, req.value);
-            Proceed(operation);
-
-            res.value = this.kvstore.get(operation.key);
-            res.ok = true;
-            return res;
-        }finally{
-            this.mutex.unlock();
-        }
+        return new Response();
     }
 
     public Response Put(Request req){
         // Your code here
-        this.mutex.lock();
-        try {
-            Op operation = new Op("Put", req.seq, req.key, req.value);
-            Response res = new Response();
-            Proceed(operation);
-            res.ok = true;
-
-            return res;
-        }
-        finally{
-            this.mutex.unlock();
-        }
+        return new Response();
     }
 
 
