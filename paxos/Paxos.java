@@ -1,19 +1,16 @@
 package paxos;
+
 import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.rmi.registry.Registry;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.Map;
-import java.util.HashMap;
-import java.lang.Math;
-
 
 /**
  * This class is the main class you need to implement paxos instances.
  */
-public class Paxos implements PaxosRMI, Runnable{
+public class Paxos implements PaxosRMI, Runnable {
 
     ReentrantLock mutex;
     String[] peers; // hostname
@@ -28,13 +25,11 @@ public class Paxos implements PaxosRMI, Runnable{
 
     // Your data here
 
-    ArrayList<Map.Entry<Integer,Value>> seqval;
-    //ArrayList<Integer> seq;
-    //ArrayList<Value> value;
+    long time; // proposed number
+    int threshold;
+    Map<Integer,Instance> map = new HashMap<>(); // <seq, Instance> instances this server knows after receives the Prepare Message
+    Queue<Map.Entry<Integer, Instance>> seqval= new ArrayDeque<>(); // proposals this server has
     int[] done;
-    HashMap<Integer,Value> map;
-    int threashold;
-
 
 
     /**
@@ -52,15 +47,12 @@ public class Paxos implements PaxosRMI, Runnable{
         this.unreliable = new AtomicBoolean(false);
 
         // Your initialization code here
-        this.done = new int[peers.length];
-        this.map = new HashMap<Integer,Value>();
-        // initialize array
-        for(int i=0;i<this.done.length;i++){
-            this.done[i] = -1;
-        }
+        this.time = this.me;
+        threshold = (peers.length+1)/2;
+        done = new int[peers.length];
+        Arrays.fill(done,-1);
 
-        this.seqval = new ArrayList<Map.Entry<Integer,Value>>();
-        this.threashold = ((peers.length+1) /2);
+
         // register peers, do not modify this part
         try{
             System.setProperty("java.rmi.server.hostname", this.peers[this.me]);
@@ -91,10 +83,11 @@ public class Paxos implements PaxosRMI, Runnable{
 
         PaxosRMI stub;
         try{
+//            System.out.println("ID=" +me +", and ports[ID="+id+"]");
             Registry registry=LocateRegistry.getRegistry(this.ports[id]);
             stub=(PaxosRMI) registry.lookup("Paxos");
-            if(rmi.equals("Prepare"))
-                callReply = stub.Prepare(req);
+            if(rmi.equals("Prepare")){
+                callReply = stub.Prepare(req);}
             else if(rmi.equals("Accept"))
                 callReply = stub.Accept(req);
             else if(rmi.equals("Decide"))
@@ -129,16 +122,26 @@ public class Paxos implements PaxosRMI, Runnable{
         // Your code here
         this.mutex.lock();
         try {
-            if(seq >= this.Min()){
-                Value tmp = new Value();
-                tmp.value = value;
-                Map.Entry<Integer, Value> seqvaltmp = new HashMap.SimpleEntry<Integer, Value>(seq, tmp);
-                this.seqval.add(seqvaltmp);
-
-                Thread t1 = new Thread(this);
-                t1.start();
+            if(seq >= this.Min() && (!map.containsKey(seq) || map.get(seq).state!= State.Decided )){
+                Instance inst = new Instance(-1,-1,value,State.Pending);
+                seqval.add(new HashMap.SimpleEntry<>(seq,inst));
             }
+        }finally {
+            this.mutex.unlock();
+        }
+        Thread thread = new Thread(this);
+        thread.start();
 
+    }
+
+    private long chooseN(long seq, long rejPreptime){
+        this.mutex.lock();
+        try {
+            long num = this.map.containsKey(seq)? Math.max(this.map.get(seq).preptime,rejPreptime) : rejPreptime;
+            while(time <= num){
+                time += peers.length;
+            }
+            return time;
         }finally {
             this.mutex.unlock();
         }
@@ -147,234 +150,182 @@ public class Paxos implements PaxosRMI, Runnable{
     @Override
     public void run(){
         //Your code here
-        /*
-        if(this.seq < this.Min()){
-            return;
-        }
-        */
-        while(true) {
-            int seqtmp=0;
-            Value valtmp=null;
-            Map.Entry<Integer, Value> each;
-
+        Map.Entry<Integer, Instance> each;
+//        while(true){
+        while(seqval.size()>0){
             this.mutex.lock();
-
-            each = this.seqval.get(0);
-            this.seqval.remove(0);
-
-            this.mutex.unlock();
-
-            seqtmp = each.getKey();
-            valtmp = each.getValue();
-
-            long time = choseN(seqtmp);
-            Request packet = new Request();
-            packet.seq = seqtmp;
-            packet.value = valtmp.value;
-            packet.time = time;
-            packet.maxDone = done[this.me];  // yue added
-            packet.id = this.me ;
-            Response ack = sendPrepare(packet);
-
-            if (ack.ok) {
-                packet.time = ack.time;
-                packet.value = ack.value;
-                Response ackback = sendAccept(packet);
-                if (ackback.ok) {
-                    if (sendDecide(packet).ok) {
-
-                        break;
+            try{
+                each = seqval.poll();
+            }finally {
+                this.mutex.unlock();
+            }
+            int seq = each.getKey();
+            Instance inst = each.getValue();
+            long preptime = chooseN(seq,inst.preptime);
+            Request req = new Request(seq,preptime,inst.value,this.me,done[this.me]);
+            Response ack = sendPrepare(req);
+            if(ack.ok){
+                req.value = ack.value;
+                req.preptime = ack.preptime;     // changed to :req.preptime = ack.preptime;
+                req.maxDone = done[this.me];
+                Response ackback = sendAccept(req);
+                if(ackback.ok){
+                    if(sendDecide(req).ok){
+                        inst.preptime = req.preptime;
+                        inst.accepttime = req.preptime;
+                        inst.state = State.Decided ;
+//                            System.out.println("Paxas[ID=" + me+"] has succeeded proposal seq=" +seq+", value = "+req.value);
                     }
                 }
-
+            }else {
+                each.getValue().preptime = ack.preptime;
             }
-
-            this.mutex.lock();
-            this.seqval.add(each);
-            this.mutex.unlock();
-
-        }
-    }
-
-
-    private long choseN(int seq){
-        //choosen, unique and higher than anynseen so far
-        this.mutex.lock();
-        try{
-            if(!this.map.containsKey(seq))
-            {
-                return System.nanoTime();
-            }
-            Value val = this.map.get(seq);
-            long num = System.nanoTime();
-            return Math.max(num,val.preptime) +1;
-        }
-        finally{
-            this.mutex.unlock();
-        }
-    }
-
-    private Response sendPrepare(Request req){
-        int count = 0;
-        long act_time =-1;
-        boolean flag = true;
-        Object acp_val = req.value;
-
-        for (int p=0;p<this.peers.length;p++){
-            Response ack;
-
-            if(p == this.me){
-                ack = Prepare(req);
-            }else{
-                ack = this.Call("Prepare",req,p);
-            }
-            if(ack != null && ack.ok){
-                this.done[p] = ack.maxDone;  // yue
-                count++;
-                if(ack.time > act_time){
-                    act_time=ack.time;
-                    acp_val =ack.value;
-                    flag = false;
+            if(inst.state != State.Decided){
+                this.mutex.lock();
+                try {
+                    seqval.add(each);
+                }finally {
+                    this.mutex.unlock();
                 }
             }
         }
 
+//        }
+
+
+    }
+    private Response sendPrepare(Request req){  // from sender side
+        int count = 0;
+        long act_time = -1;
+        long pre_time = -1;
+        Object act_val = null;
+        Response prepare_ok;
+        for (int i=0; i<this.peers.length; i++){
+            prepare_ok = i==this.me ? Prepare(req):this.Call("Prepare",req,i);
+
+            if(prepare_ok!=null ){
+
+                this.done[i]=prepare_ok.maxDone;
+                if(prepare_ok.ok){
+                    count++;
+                    if(prepare_ok.accepttime > act_time){
+                        act_time = prepare_ok.accepttime;
+                        act_val = prepare_ok.value;
+                    }
+                }
+                if(prepare_ok.preptime > pre_time){     // 改了，不管拒绝不拒绝，都要把 acceptor的highest prepare seen送出去
+                    pre_time = prepare_ok.preptime;
+                }
+            }
+        }
         Response ack = new Response();
-        if(flag){
-            acp_val = req.value;
-            act_time = req.time;
-        }
-        if(count>=this.threashold){
-            ack.ok = true;
-            ack.value=acp_val;
-            ack.time = req.time;
-        }else{
-            ack.ok = false;
-        }
+        ack.ok = count>= this.threshold? true: false;
+        ack.preptime = pre_time;     //  highest prepare seen from the Acceptors
+        ack.accepttime = act_time ;    // 改了
+        ack.value = act_val == null? req.value : act_val;
         return ack;
     }
 
     private Response sendAccept(Request req){
         int count = 0;
-        long act_time =req.time;
+        Response accept_ok;
+        for (int i=0; i<this.peers.length; i++){
+            accept_ok = i==this.me? Accept(req) : Call("Accept",req,i);
 
-        for (int p=0;p<this.peers.length;p++){
-            Response ack;
-            if(p == this.me){
-                ack = Accept(req);
-            }else{
-                ack = this.Call("Accept",req,p);
-            }
-            if(ack != null && ack.ok){
-                count++;
-                this.done[p] = ack.maxDone;   //yue
+            if(accept_ok!= null){
+
+                this.done[i] = accept_ok.maxDone;
+                if(accept_ok.ok){
+                    count++;
+                }
             }
         }
-
         Response ack = new Response();
-        if(count>=this.threashold){
-            ack.ok = true;
-        }else{
-            ack.ok = false;
-        }
+        ack.ok = count >= this.threshold? true :false;
+        ack.value = req.value;    // 改了， 这里是收集 accept_ok的信息
         return ack;
     }
 
     private Response sendDecide(Request req){
         int count = 0;
-        long act_time =req.time;
+        Response decide_ok;
+        for (int i=0; i<this.peers.length; i++){
+            decide_ok = i==this.me? Decide(req) : Call("Decide",req,i);
+            if(decide_ok!=null){
 
-        for (int p=0;p<this.peers.length;p++){
-            Response ack;
-            if(p == this.me){
-                ack = Decide(req);
-            }else{
-                ack = this.Call("Decide",req,p);
+                this.done[i] =  decide_ok.maxDone;
+                if(decide_ok.ok){
+                    count++;
+                }
             }
-            if(ack != null && ack.ok){
-                this.done[p]= ack.maxDone;  // yue
-                count++;
-            }
+
         }
-
         Response ack = new Response();
+//        ack.ok = count== peers.length? true: false; // 改了，有可能有的partner reach不到，所以不能用count
         ack.ok = true;
         return ack;
     }
 
-
-
-    // RMI handler
+    // RMI handler      - at receiver side
     public Response Prepare(Request req){
         // your code here
         this.mutex.lock();
         try{
-            this.done[req.id] = req.maxDone;  // yue
-            Response ack = new Response();
-            ack.maxDone = this.done[this.me];  // yue
-            // If it's the first trial
+
+            this.done[req.id]= req.maxDone; // yue
+
+            Response prepare_ok;
             if(!this.map.containsKey(req.seq)){
-                Value val = new Value();
-                val.preptime = req.time;
-                val.value = req.value;
-                this.map.put(req.seq,val);
-                ack.time = val.accepttime;
-                ack.value = val.value;
-                ack.ok = true;
+                Instance inst = new Instance(req.preptime,-1,null,State.Pending);
+                this.map.put(req.seq,inst);
+                prepare_ok = new Response(true,null,req.preptime,-1,done[this.me],this.me);
 
-                return ack;
-            }
-            //else
-            Value val = this.map.get(req.seq);
+            }else{
+                Instance inst = this.map.get(req.seq);
 
-            if(req.time > val.preptime){
-                val.preptime = req.time;
-                ack.time = val.accepttime;
-                ack.value = val.value;
-                ack.ok = true;
+                if(req.preptime >= inst.preptime){   // n > n_p , preptime > highest prepare seen
+                    inst.preptime = req.preptime;  // update the highest proposal preptime seen
+                    prepare_ok = new Response(true,inst.value,inst.preptime,inst.accepttime,done[this.me],this.me);
+                }else{
+                    prepare_ok = new Response(false,inst.value,inst.preptime,inst.accepttime,done[this.me],this.me);
+                }
+
             }
-            else
-            {
-                ack.ok = false;
-            }
-            return ack;
-        }finally{
+
+            return prepare_ok;
+
+        }finally {
             this.mutex.unlock();
         }
+
+
     }
 
     public Response Accept(Request req){
         // your code here
         this.mutex.lock();
         try{
-            this.done[req.id] = req.maxDone;  // yue
-            Response ack = new Response();
-            ack.maxDone = this.done[this.me];  // yue
-            if(!this.map.containsKey(req.seq)){
-                Value val = new Value();
-                val.preptime = req.time;
-                val.accepttime = req.time;
-                val.value = req.value;
-                this.map.put(req.seq,val);
-                ack.value = val.value;
-                ack.ok = true;
-                return ack;
-            }
-            Value val = this.map.get(req.seq);
 
-            if(req.time >= val.preptime){
-                val.preptime = req.time;
-                val.accepttime = req.time;
-                val.value = req.value;
-                ack.value = val.value;
-                ack.ok = true;
+            this.done[req.id] = req.maxDone;  //yue
+            Response accept_ok ;
+            if(!map.containsKey(req.seq)){
+                System.out.println("Error, paxos ["+this.me +"]Receive accept request from paxos["+req.id+"]before receive the prepare request, return null");
+
+                return null;
             }
-            else
-            {
-                ack.ok = false;
+            Instance inst = map.get(req.seq);
+
+            if(req.preptime >= inst.preptime){
+                inst.preptime = req.preptime;
+                inst.accepttime = req.preptime;
+                inst.value = req.value;
+                accept_ok = new Response(true,inst.value,inst.preptime,inst.accepttime,done[this.me],this.me);
+            }else{
+                accept_ok = new Response(false,inst.value,inst.preptime,inst.accepttime,done[this.me],this.me);
             }
-            return ack;
-        }finally{
+
+            return accept_ok;
+        }finally {
             this.mutex.unlock();
         }
 
@@ -385,28 +336,24 @@ public class Paxos implements PaxosRMI, Runnable{
         this.mutex.lock();
         try{
             this.done[req.id] = req.maxDone;  // yue
-            Response ack = new Response();
-            ack.maxDone = this.done[this.me];  // yue
-            if(!this.map.containsKey(req.seq)){
-                Value val = new Value();
-                val.status = State.Decided;
-                val.preptime = req.time;
-                val.accepttime = req.time;
-                val.value = req.value;
-                this.map.put(req.seq,val);
-                ack.ok = true;
-                return ack;
+            Response decide_ok;
+            if(!map.containsKey(req.seq)){
+                System.out.println("Paxos ["+this.me +"]Receive decide request from paxos["+req.id+"]before receive the prepare request, return null");
+
+                return null;
             }
-            Value val = this.map.get(req.seq);
-            val.status = State.Decided;
-            val.preptime = req.time;
-            val.accepttime = req.time;
-            val.value = req.value;
-            ack.ok = true;
-            return ack;
-        }finally{
+            Instance inst = this.map.get(req.seq);
+            inst.value = req.value;
+            inst.state = State.Decided;
+//            inst.preptime= req.preptime;
+//            inst.accepttime = req.preptime;
+            decide_ok = new Response(true,inst.value,inst.preptime,inst.accepttime,this.done[this.me],this.me);
+
+            return decide_ok;
+        }finally {
             this.mutex.unlock();
         }
+
     }
 
     /**
@@ -415,14 +362,14 @@ public class Paxos implements PaxosRMI, Runnable{
      *
      * see the comments for Min() for more explanation.
      */
-    public void Done(int seq) {   // ok to forget all instances <= seq
+    public void Done(int seq) {
         // Your code here
         this.mutex.lock();
         try{
             if(seq>this.done[this.me]){
-                //System.out.println("Done called, this.done[me="+this.me +"] =" +this.done[this.me]);
+//                System.out.println("Done called, this.done[me="+this.me +"] =" +this.done[this.me]);
                 this.done[this.me] = seq;
-                //System.out.println("made equal to seq =" +seq);
+//                System.out.println("made equal to seq =" +seq);
             }
         }finally{
             this.mutex.unlock();
@@ -456,16 +403,19 @@ public class Paxos implements PaxosRMI, Runnable{
      * where z_i is the highest number ever passed
      * to Done() on peer i. A peers z_i is -1 if it has
      * never called Done().
+
      * Paxos is required to have forgotten all information
      * about any instances it knows that are < Min().
      * The point is to free up memory in long-running
      * Paxos-based servers.
+
      * Paxos peers need to exchange their highest Done()
      * arguments in order to implement Min(). These
      * exchanges can be piggybacked on ordinary Paxos
      * agreement protocol messages, so it is OK if one
      * peers Min does not reflect another Peers Done()
      * until after the next instance is agreed to.
+
      * The fact that Min() is defined as a minimum over
      * all Paxos peers means that Min() cannot increase until
      * all peers have been heard from. So if a peer is dead
@@ -479,15 +429,16 @@ public class Paxos implements PaxosRMI, Runnable{
     public int Min(){
         // Your code here
         this.mutex.lock();
-        int min = Integer.MAX_VALUE;
         try{
+            int min = Integer.MAX_VALUE;
             for(int i=0;i<peers.length;i++){
                 if (this.done[i] < min)
                 {
                     min = this.done[i];
                 }
             }
-            for(int seq :map.keySet()){
+
+            for(int seq :map.keySet()){   // free up memory
                 if(seq<min){
                     map.remove(seq);
                 }
@@ -509,30 +460,18 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public retStatus Status(int seq){
         // Your code here
-        this.mutex.lock();
+        if(seq >= Min()){
+            if(map.containsKey(seq)){
+                Instance inst = map.get(seq);
 
-        try{
-            retStatus ret;
-            if(seq < this.Min()){
-                if(!this.map.containsKey(seq)){
-                    ret = new retStatus(State.Forgotten,null);
-                    return ret;
-                }
-                Value v = this.map.get(seq);
-                ret = new retStatus(v.status,v.value);
-                return ret;
+                return new retStatus(inst.state,inst.value);
+            }else {
+                //System.out.println("Not a known instance on Paxos[ID="+this.me+"].");
+                return new retStatus(State.Pending,null);
             }
-            if(this.map.containsKey(seq)){
-                Value v = this.map.get(seq);
-                ret = new retStatus(v.status,v.value);
-            }else{
-                ret = new retStatus(State.Pending,null);
-            }
-            return ret;
-        }finally
-        {
-            this.mutex.unlock();
         }
+        return new retStatus(State.Forgotten,null);
+
     }
 
     /**
@@ -575,7 +514,6 @@ public class Paxos implements PaxosRMI, Runnable{
     public boolean isunreliable(){
         return this.unreliable.get();
     }
-
 
 
 }
