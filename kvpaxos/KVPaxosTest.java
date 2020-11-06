@@ -123,11 +123,11 @@ public class KVPaxosTest {
         check(ck[0], "a", 15);
         ck[0].ports[0] = 1100;
         ck[1].Put("app",16);
-        check(ck[1], "app", 16);
         ck[0].Put("B", 15);
         check(ck[0], "B", 15);
         ck[1].Put("B", 25);
         check(ck[1], "B", 25);
+        check(ck[1], "app", 16);
         System.out.println("... Passed");
     }
 
@@ -142,8 +142,8 @@ public class KVPaxosTest {
             arr[i] =  new String(array, Charset.forName("UTF-8"));
         }
 
-        final int npaxos = 5;
-        final int nclient = 30;
+        final int npaxos = 10;
+        final int nclient = 2;
         String host = "127.0.0.1";
         String[] peers = new String[npaxos];
         int[] ports = new int[npaxos];

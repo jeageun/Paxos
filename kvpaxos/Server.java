@@ -69,7 +69,7 @@ public class Server implements KVPaxosRMI {
 
     private void Proceed(Op operation){
         Op waiting;
-        while(true){
+        do{
             int serv = this.Serverseq;
             this.px.Start(serv,operation);
             waiting = this.wait(serv);
@@ -78,11 +78,7 @@ public class Server implements KVPaxosRMI {
             }
             this.px.Done(serv);
             this.Serverseq++;
-
-            if (operation.ClientSeq == waiting.ClientSeq){
-                break;
-            }
-        }
+        }while(operation.ClientSeq != waiting.ClientSeq);
     }
 
 
@@ -91,12 +87,9 @@ public class Server implements KVPaxosRMI {
         // Your code here
         this.mutex.lock();
         try{
-            Response res = new Response();
             Op operation = new Op("Get", req.seq, req.key, req.value);
             Proceed(operation);
-
-            res.value = this.kvstore.get(operation.key);
-            res.ok = true;
+            Response res = new Response(this.kvstore.get(operation.key),true);
             return res;
         }finally{
             this.mutex.unlock();
@@ -108,10 +101,8 @@ public class Server implements KVPaxosRMI {
         this.mutex.lock();
         try {
             Op operation = new Op("Put", req.seq, req.key, req.value);
-            Response res = new Response();
             Proceed(operation);
-            res.ok = true;
-
+            Response res = new Response(-1,true);
             return res;
         }
         finally{

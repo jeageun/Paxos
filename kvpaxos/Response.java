@@ -12,5 +12,9 @@ public class Response implements Serializable {
     int value;
     boolean ok;
 
+    public Response(int value, boolean ok){
+        this.value = value;
+        this.ok = ok;
+    }
     // Your constructor and methods here
 }

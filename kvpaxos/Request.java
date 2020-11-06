@@ -12,8 +12,12 @@ public class Request implements Serializable {
     String key;
     int value;
     int seq;
-    boolean ok;
 
+    public Request(String key, int value, int seq){
+        this.key = key;
+        this.value = value;
+        this.seq = seq;
+    }
     // Your constructor and methods here
 
 }

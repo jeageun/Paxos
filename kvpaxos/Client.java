@@ -55,17 +55,12 @@ public class Client {
     // RMI handlers
     public Integer Get(String key){
         // Your code here
-        Request req = new Request();
-        req.key = key;
-        req.seq = this.seq;
-        this.seq ++;
-        Response res = new Response();
-
+        Request req = new Request(key,0,this.seq++);
+        Response res = null;
         while(true) {
-            int count =0;
             for (int i = 0; i < ports.length; i++) {
                 res = Call("Get", req, i);
-                if((res != null) && (res.ok)){
+                if((res != null) && (res.ok)) {
                     break;
                 }
             }
@@ -76,21 +71,18 @@ public class Client {
 
     public boolean Put(String key, Integer value){
         // Your code here
-        Request req = new Request();
+        Request req = new Request(key,value,this.seq++);
         Response res=null;
-        req.key = key;
-        req.value = value;
-        req.seq = this.seq;
-        this.seq ++;
+        boolean flag=false;
         while(true) {
             int count = 0;
             for (int i = 0; i < ports.length; i++) {
                 res = Call("Put", req, i);
                 if ((res != null) && (res.ok)) {
-                    break;
+                    flag = true;
                 }
             }
-            if(res == null) continue;
+            if(!flag) continue;
             return true;
         }
     }
